@@ -1,0 +1,327 @@
+<!-- public/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>D3 Force-Directed Graph with CSV Data</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        .node circle {
+            fill: #69b3a2;
+            stroke: #333;
+            stroke-width: 1.5px;
+        }
+
+        .link.primary {
+            stroke: #999;
+            stroke-width: 2px;
+            stroke-opacity: 0.8;
+        }
+
+        .link.secondary {
+            stroke: #bbb;
+            stroke-width: 1px;
+            stroke-opacity: 0.6;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- <h1>Force-Directed Graph with D3.js from CSV</h1> -->
+    <select id="nodeSize" onchange="updateNodeSize()">
+        <option value="Cited By">Cited By (Column V)</option>
+        <option value="Cites">Cites (Column U)</option>
+        <option value="Research Method Population Scale">Research Method Population Scale (Column X)</option>
+        <option value="Harm Magnitude">Harm Magnitude (Column Y)</option>
+        <option value="Harm Population Impact">Harm Population Impact (Column Z)</option>
+    </select>
+    <svg width="100%" height="100%"></svg>
+    <script>
+        // Function to load data from the CSV file and render the graph
+        d3.csv("spreadsheetscatterday.csv").then(data => {
+            // Extract the user-selected column for node size
+            const nodeSizeColumn = document.getElementById("nodeSize").value;
+
+            // Use a Map to store unique nodes and avoid duplicates
+            const nodesMap = new Map();
+            const links = [];
+
+            // Process each row of CSV data
+            data.forEach(row => {
+                // Ensure size is a valid number; fallback to 1 if not
+                const size = +row[nodeSizeColumn] || 1;
+
+                // Add the primary node to the map if it doesn't exist
+                const primaryNodeId = row["Social Determinant Category"];
+                if (primaryNodeId && !nodesMap.has(primaryNodeId)) {
+                    nodesMap.set(primaryNodeId, { id: primaryNodeId, size: size });
+                }
+
+                // Add the primary link node to the map if it doesn't exist
+                const primaryLinkId = row["Primary Determinant Analyzed"];
+                if (primaryLinkId && !nodesMap.has(primaryLinkId)) {
+                    nodesMap.set(primaryLinkId, { id: primaryLinkId, size: 1 }); // Default size for linked nodes
+                }
+
+                // Create primary links
+                if (primaryLinkId) {
+                    links.push({
+                        source: primaryNodeId,
+                        target: primaryLinkId,
+                        type: "primary"  // Primary links are rendered thicker
+                    });
+                }
+
+                // Add secondary nodes and links
+                ["Secondary Determinant Analyzed 1", "Secondary Determinant Analyzed 2", "Secondary Determinant Analyzed 3"].forEach(col => {
+                    const secondaryNodeId = row[col];
+                    if (secondaryNodeId && !nodesMap.has(secondaryNodeId)) {
+                        nodesMap.set(secondaryNodeId, { id: secondaryNodeId, size: 1 });
+                    }
+
+                    if (secondaryNodeId) {
+                        links.push({
+                            source: primaryNodeId,
+                            target: secondaryNodeId,
+                            type: "secondary"  // Secondary links are rendered thinner
+                        });
+                    }
+                });
+            });
+
+
+
+            // Convert the Map to an array for D3
+            const nodes = Array.from(nodesMap.values());
+
+            // Render the graph
+            renderGraph(nodes, links);
+        });
+
+        // Create a tooltip div and set its initial style
+        const tooltip = d3.select("body")
+            .append("div")
+            .attr("class", "tooltip")
+            .style("position", "absolute")
+            .style("background-color", "white")
+            .style("border", "1px solid #ddd")
+            .style("padding", "5px")
+            .style("border-radius", "3px")
+            .style("pointer-events", "none")
+            .style("opacity", 0); // Start with tooltip hidden
+
+        // Function to render the graph with nodes and links
+        function renderGraph(nodes, links) {
+            const width = 1200;
+            const height = 600;
+
+            // Create a color scale based on "Primary Determinant Analyzed"
+            const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+
+            // Update the domain of the color scale based on unique primary determinants
+            const primaryDeterminants = Array.from(new Set(nodes.map(node => node.primaryDeterminant)));
+            colorScale.domain(primaryDeterminants);
+
+            debugger;
+            // Find the minimum and maximum size values for the scale domain
+            const sizeValues = nodes.map(d => d.size);
+            const minSize = Math.min(...sizeValues);
+            const maxSize = Math.max(...sizeValues);
+
+            // Define the size scale using a square root scale
+            const sizeScale = d3.scaleSqrt()
+                .domain([minSize, maxSize]) // Input domain based on the min and max sizes in the data
+                .range([5, 50]); // Output range for node sizes in pixels
+
+
+            // Create the SVG container with a viewBox
+            const svg = d3.select("svg")
+                .attr("viewBox", `0 0 ${width} ${height}`) // Define viewBox to make it responsive
+                .attr("preserveAspectRatio", "xMidYMid meet"); // Preserve aspect ratio
+
+            // Add links to the graph
+            const link = svg.append("g")
+                .selectAll("line")
+                .data(links)
+                .enter()
+                .append("line")
+                .attr("stroke-width", d => d.type === "primary" ? 3 : 1) // Thicker line for primary links, thinner for secondary links
+                .attr("stroke", "#999");
+
+            // Add nodes to the graph
+            const nodeGroup = svg.append("g");
+
+            const node = nodeGroup.selectAll("circle")
+                .data(nodes)
+                .enter()
+                .append("circle")
+                //.attr("r", 10)
+                //.attr("r", d => d.size) // Set node size dynamically
+                .attr("r", d => sizeScale(d.size))
+                .attr("fill", d => colorScale(d.id || "Unknown")) // Use color scale for node fill
+                .attr("stroke", "#333") // Optional: Add stroke for better visibility
+                .attr("stroke-width", 1.5)
+                .on("mouseover", (event, d) => { // Show tooltip on hover
+                    tooltip
+                        .style("opacity", 1)
+                        .html(`ID: ${d.id}<br>Size: ${d.size}`) // Display the node's size
+                        .style("left", (event.pageX + 5) + "px")
+                        .style("top", (event.pageY + 5) + "px");
+                })
+                .on("mouseout", () => { // Hide tooltip when mouse leaves
+                    tooltip.style("opacity", 0);
+                });
+
+            // Add labels to the graph
+            const labels = nodeGroup.selectAll("text")
+                .data(nodes)
+                .enter()
+                .append("text")
+                .attr("text-anchor", "middle")
+                .attr("dy", "-1em") // Adjust vertical position to move label above node
+                .text(d => d.id)
+                .attr("fill", "#000") // Color of the text
+                .style("font-size", "12px");
+
+            // D3 force simulation for the nodes and links
+            // const simulation = d3.forceSimulation(nodes)
+            //     .force("link", d3.forceLink(links).id(d => d.id).distance(200)) // Increase distance between connected nodes
+            //     .force("charge", d3.forceManyBody().strength(-200)) // Increase repulsion to spread out nodes
+            //     .force("collide", d3.forceCollide(d => d.size + 10)) // Add collision force to prevent overlap
+            //     .force("center", d3.forceCenter(width / 2, height / 2))
+            const simulation = d3.forceSimulation(nodes)
+                .force("link", d3.forceLink(links).id(d => d.id).distance(200))
+                .force("charge", d3.forceManyBody())
+                .force("center", d3.forceCenter(width / 2, height / 2))
+                .on("tick", () => {
+                    link
+                        .attr("x1", d => d.source.x)
+                        .attr("y1", d => d.source.y)
+                        .attr("x2", d => d.target.x)
+                        .attr("y2", d => d.target.y);
+
+                    node
+                        .attr("cx", d => d.x)
+                        .attr("cy", d => d.y);
+
+                    labels
+                        .attr("x", d => d.x)
+                        .attr("y", d => d.y - 10); // Adjust position to avoid overlap with node
+                });
+
+            // Add drag behavior to nodes
+            node.call(d3.drag()
+                .on("start", (event, d) => {
+                    if (!event.active) simulation.alphaTarget(0.3).restart();
+                    d.fx = d.x;
+                    d.fy = d.y;
+                })
+                .on("drag", (event, d) => {
+                    d.fx = event.x;
+                    d.fy = event.y;
+                })
+                .on("end", (event, d) => {
+                    if (!event.active) simulation.alphaTarget(0);
+                    d.fx = null;
+                    d.fy = null;
+                }));
+        }
+
+        // Update node size when the user selects a different column
+        function updateNodeSize() {
+            // Clear the SVG to redraw
+            d3.select('svg').selectAll("*").remove();
+
+            d3.csv("spreadsheetscatterday.csv").then(data => {
+                // Extract the user-selected column for node size
+                const nodeSizeColumn = document.getElementById("nodeSize").value;
+
+                // Use a Map to store unique nodes and avoid duplicates
+                const nodesMap = new Map();
+                const links = [];
+
+                // Process each row of CSV data
+                data.forEach(row => {
+                    // Ensure size is a valid number; fallback to 1 if not
+                    const size = +row[nodeSizeColumn] || 1;
+
+                    // Process primary node
+                    const primaryNodeId = row["Social Determinant Category"];
+                    if (primaryNodeId) {
+                        if (!nodesMap.has(primaryNodeId)) {
+                            nodesMap.set(primaryNodeId, { id: primaryNodeId, size: size });
+                        } else {
+                            // Accumulate size if the node already exists
+                            nodesMap.get(primaryNodeId).size += size;
+                        }
+                    }
+
+                    // Process primary link node
+                    const primaryLinkId = row["Primary Determinant Analyzed"];
+                    if (primaryLinkId) {
+                        if (!nodesMap.has(primaryLinkId)) {
+                            nodesMap.set(primaryLinkId, { id: primaryLinkId, size: 1 }); // Default size for linked nodes
+                        } else {
+                            // Accumulate size if the node already exists
+                            nodesMap.get(primaryLinkId).size += 1;
+                        }
+                    }
+
+                    // Create primary links
+                    if (primaryLinkId) {
+                        links.push({
+                            source: primaryNodeId,
+                            target: primaryLinkId,
+                            type: "primary"
+                        });
+                    }
+
+                    // Add secondary nodes and links
+                    ["Secondary Determinant Analyzed 1", "Secondary Determinant Analyzed 2", "Secondary Determinant Analyzed 3"].forEach(col => {
+                        const secondaryNodeId = row[col];
+                        if (secondaryNodeId) {
+                            if (!nodesMap.has(secondaryNodeId)) {
+                                nodesMap.set(secondaryNodeId, { id: secondaryNodeId, size: 1 });
+                            } else {
+                                // Accumulate size if the node already exists
+                                nodesMap.get(secondaryNodeId).size += 1;
+                            }
+
+                            links.push({
+                                source: primaryNodeId,
+                                target: secondaryNodeId,
+                                type: "secondary"
+                            });
+                        }
+                    });
+                });
+
+                // Convert the Map to an array for D3
+                const nodes = Array.from(nodesMap.values());
+
+                // Render the graph with updated nodes and links
+                renderGraph(nodes, links);
+            });
+        }
+
+    </script>
+</body>
+
+</html>
+
+// create the size as the number of records as
+// create the map with each node
+// there should be 300 records
+// have the 300 records sorted by the primary and secondary
+// want to look at the columns for each column
+// have the ful universe of records
+
+//keep colors keyed off of column B (6 colors static throughtout the experience
+// change the way they are sorted
+//Column K U and V for sizing
+// Sized the node based of
+// Lengths connected based off of shared values on Column C D E F
+// Drop down menu have as sort links by: name of that cokumn as the linkage (if the sahare the same value for column C there is a link)
+// min max sizing the 1-20 with 20 is the largest
