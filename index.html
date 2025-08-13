@@ -31,11 +31,9 @@
 <body>
     <script>
 function getQueryParams() {
-  const q = new URLSearchParams(location.search);
-  // Read your QuickSight parameters by the names you used in the URL
-  // e.g. ...?harmMagnitude=High&cluster=Equity
-  const harmMagnitude = q.get('harmMagnitude');      // string or null
-  const clusterRaw    = q.get('cluster');            // could be "A,B,C" for multi
+  const q = new URLSearchParams(window.location.search);
+const harmMagnitude = q.get('pHarmMagnitude');
+const test2 = q.get('test2');
   const clusterList   = clusterRaw ? clusterRaw.split(',').map(decodeURIComponent) : null;
 
   return { harmMagnitude, clusterList };
@@ -322,5 +320,6 @@ function getQueryParams() {
 </body>
 
 </html>
+
 
 
