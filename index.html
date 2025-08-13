@@ -29,6 +29,18 @@
 </head>
 
 <body>
+    <script>
+function getQueryParams() {
+  const q = new URLSearchParams(location.search);
+  // Read your QuickSight parameters by the names you used in the URL
+  // e.g. ...?harmMagnitude=High&cluster=Equity
+  const harmMagnitude = q.get('harmMagnitude');      // string or null
+  const clusterRaw    = q.get('cluster');            // could be "A,B,C" for multi
+  const clusterList   = clusterRaw ? clusterRaw.split(',').map(decodeURIComponent) : null;
+
+  return { harmMagnitude, clusterList };
+}
+</script>
     <!-- <h1>Force-Directed Graph with D3.js from CSV</h1> -->
     <select id="nodeSize" onchange="updateNodeSize()">
         <option value="Cited By">Cited By (Column V)</option>
@@ -325,3 +337,4 @@
 // Lengths connected based off of shared values on Column C D E F
 // Drop down menu have as sort links by: name of that cokumn as the linkage (if the sahare the same value for column C there is a link)
 // min max sizing the 1-20 with 20 is the largest
+
